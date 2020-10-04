@@ -11,6 +11,8 @@ N3. Lowercase last names (without local name)
 SELECT * FROM Persons 
 WHERE BINARY MID(REVERSE(name), LOCATE(' ', REVERSE(name))-1,1) 
         <> UPPER(MID(REVERSE(name), LOCATE(' ', REVERSE(name))-1,1))
+/* exclusion of documented known positives */
+AND id NOT IN ('2008DANG02', '2008DEBR01', '2011BROE01', '2013DALM01')
 
 Person data irregularities
 N4. Lowercase last names (with local name)
@@ -19,10 +21,14 @@ AND BINARY MID(REVERSE(LEFT(name, LOCATE('(',name)-2)),
                LOCATE(' ', REVERSE(LEFT(name, LOCATE('(',name)-2)))-1,1) 
         <> UPPER(MID(REVERSE(LEFT(name, LOCATE('(',name)-2)), 
                  LOCATE(' ', REVERSE(LEFT(name, LOCATE('(',name)-2)))-1,1))
+/* exclusion of documented known positives */ 
+AND id NOT IN ('2012ALFA02')
 
 Person data irregularities
 N5. Bad local names (roman characters in brackets)
 SELECT * FROM Persons WHERE BINARY name REGEXP '[(].*[A-Za-z]+'
+/* exclusion of documented known positives */ 
+AND id NOT IN ('2017TRAN24')
 
 Person data irregularities
 N6. Missing one bracket for local names
@@ -96,12 +102,15 @@ SELECT * FROM Results WHERE average <> 0 AND IF(value1<>0,1,0) + IF(value2<>0,1,
 Duplicate results
 1. Rows with at least two identical >0 results at one competition (ignoring 333fm, 333mbo):
 SELECT value1, value2, value3, value4, value5, count(*) as num_rows, 
- GROUP_CONCAT(distinct personId) as people, GROUP_CONCAT(distinct eventId) as events, 
+ GROUP_CONCAT(id ORDER BY id) as result_ids, GROUP_CONCAT(personId) as people,  
+ GROUP_CONCAT(distinct eventId) as events, 
  GROUP_CONCAT(distinct competitionId) as competitions 
 FROM Results WHERE eventId not in ('333mbo', '333fm') AND 
  IF(value1>0,1,0) + IF(value2>0,1,0) + IF(value3>0,1,0) + IF(value4>0,1,0) + IF(value5>0,1,0) > 1
 GROUP BY value1, value2, value3, value4, value5 
 HAVING num_rows > 1 AND count(distinct competitionId) = 1
+/* exclusion of documented known positives */ 
+AND result_ids NOT IN ('104833,104834', '1215637,1215638')
 
 WCA-ID irregularities
 1. WCA-ID year is not the start year of the profiles first competition:
@@ -111,19 +120,25 @@ GROUP BY personID HAVING first_year <> LEFT(personId,4)
 
 Duplicate scrambles
 1. Duplicates within scrambles for one competitionId:
-SELECT GROUP_CONCAT(distinct competitionId) as competitions, 
-        GROUP_CONCAT(distinct eventId) AS events, 
+SELECT competitionId, GROUP_CONCAT(distinct eventId) AS events, 
     GROUP_CONCAT(distinct roundTypeId) AS roundTypeIds, 
     GROUP_CONCAT(distinct groupId) AS groupIds, scramble, 
     count(scrambleId) AS scount, GROUP_CONCAT(scrambleId) AS scramleIds
-FROM (SELECT dups.scramble, scrambleId, competitionId, eventId, roundTypeId, groupId
-        FROM (SELECT scramble FROM Scrambles 
-              WHERE eventId not in ('222', 'skewb') 
-              GROUP BY scramble HAVING count(*) > 1) dups
-        INNER JOIN Scrambles
-                ON dups.scramble = Scrambles.scramble) t
-GROUP BY scramble HAVING count(distinct competitionId) = 1
-ORDER BY competitions, events, roundTypeIds, groupIds
+FROM (SELECT dups.scramble, scrambleId, s.competitionId, eventId, roundTypeId, groupId
+        FROM (SELECT competitionId, scramble FROM Scrambles 
+              GROUP BY competitionId, scramble HAVING count(*) > 1) dups
+        INNER JOIN Scrambles as s
+        ON dups.competitionId = s.competitionId AND dups.scramble = s.scramble) t
+GROUP BY competitionId, scramble
+/* exclusion of documented known positives */ 
+HAVING scramleIds NOT IN (
+    '298956,299005', '299000,298951', '299004,298955', '299003,298954', '299001,298952', 
+    '298957,299006', '299002,298953', '299012,298963', '299011,298962', '299007,298958', 
+    '299009,298960', '299008,298959', '298964,299013', '299010,298961', '413270,411994', 
+    '411995,413271', '413272,411996', '413274,411998', '413273,411997', '413275,411999', 
+    '413276,412000', '147189,147238', '471947,471952', '624557,618860', '618861,624558', 
+    '624559,618862', '624562,618865', '624561,618864', '624560,618863', '624563,618866')
+ORDER BY competitionId, events, roundTypeIds, groupIds
 
 Duplicate scrambles
 2. Duplicates across multiple competitions (ignoring 222 and skewb):
@@ -139,6 +154,12 @@ FROM (SELECT dups.scramble, scrambleId, competitionId, eventId, roundTypeId, gro
         INNER JOIN Scrambles
                 ON dups.scramble = Scrambles.scramble) t
 GROUP BY scramble HAVING count(distinct competitionId) > 1
+/* exclusion of documented known positives */ 
+AND scramleIds NOT IN (
+    '913193,872329', '591396,108243', '1415881,1360215', '1415882,1360216', '1415884,1360218', 
+    '1415885,1360219', '1415883,1360217', '1360214,1415880', '1360213,1415879', '1415876,1360133', 
+    '1360129,1415872', '1415875,1360132', '1415874,1360131', '1415878,1360135', '1415877,1360134', 
+    '1415873,1360130')
 ORDER BY competitions, events, roundTypeIds, groupIds
 
 Invalid scrambles
@@ -163,12 +184,19 @@ ON s.competitionId = r.competitionId AND s.roundTypeId = r.roundTypeId AND s.eve
 INNER JOIN Formats as f ON r.formatId = f.id
 INNER JOIN Competitions as c ON s.competitionId = c.id
 WHERE scramble_num <> f.expected_solve_count 
-ORDER BY start_date DESC
+/* exclusion of documented known positives */ 
+AND CONCAT(s.competitionId, s.eventId, s.roundTypeId, s.groupId) NOT IN (
+    'HappySheepYear2015333mbffA', 'BayAreaSpeedcubin92016333mbffA', 'ValborgCubing2019333mbffB', 
+    'SilentSummerOrlando2019333mbffB', 'JonkopingSideEvents2019333mbffB', 'CampeonatoBrasileiro2019333mbffB', 
+    'KjellerMentalBreakdown2019333fmfA', 'VJTIMumbaiCubeOpen2019333mbffB', 'SidenBlindForserum2020333mbffB')
+ORDER BY start_date
 
 Competition data irregularities
 1. Lowercase competitionIds
 SELECT id FROM Competitions 
 WHERE announced_at is not NULL and BINARY id REGEXP '^[a-z]'
+/* exclusion of documented known positives */ 
+AND id NOT IN ('chilerubik2011', 'iCubeDay2017', 'iCubeOpen2017', 'mcubesOpen2019')
 
 Competition data irregularities
 2. competitionIds not ending with year (or endYear):
@@ -192,7 +220,7 @@ INNER JOIN users u ON p.id=u.wca_id AND p.name<>u.name AND p.subId=1
 
 Suspicious rounds data
 1. Time limit < cutoff
-SELECT ce.competition_id, ce.event_id, 
+SELECT ce.id, ce.competition_id, ce.event_id, 
  CONVERT(MID(ro.time_limit, 17, 10), UNSIGNED INTEGER) time_limit, 
  CONVERT(MID(ro.cutoff, 39, 10), UNSIGNED INTEGER) cutoff
 FROM (SELECT * FROM rounds WHERE time_limit is not NULL and cutoff is not NULL) as ro 
@@ -203,27 +231,31 @@ HAVING time_limit> 0 and time_limit < cutoff
 
 Suspicious rounds data
 2. Cutoff < 5 seconds:
-SELECT ce.competition_id, ce.event_id, 
+SELECT ce.id, ce.competition_id, ce.event_id, 
  CONVERT(MID(ro.cutoff, 39, 10), UNSIGNED INTEGER) cutoff
 FROM (SELECT * FROM rounds WHERE cutoff is not NULL) as ro  
 INNER JOIN (SELECT * FROM competition_events WHERE event_id <> '333fm') as ce 
  ON ce.id = ro.competition_event_id
 INNER JOIN (SELECT id FROM Competitions WHERE announced_at is not NULL) as comps
  ON ce.competition_id = comps.id HAVING cutoff < 500
+/* exclusion of documented known positives */ 
+AND ce.id NOT IN (16079)
 
 Suspicious rounds data
 3. Cutoff > 10 minutes:
-SELECT ce.competition_id, ce.event_id, 
+SELECT ce.id, ce.competition_id, ce.event_id, 
  CONVERT(MID(ro.cutoff, 39, 10), UNSIGNED INTEGER) cutoff
 FROM (SELECT * FROM rounds WHERE cutoff is not NULL) as ro  
 INNER JOIN (SELECT * FROM competition_events WHERE event_id <> '333mbf') as ce 
  ON ce.id = ro.competition_event_id
 INNER JOIN (SELECT id FROM Competitions WHERE announced_at is not NULL) as comps
  ON ce.competition_id = comps.id HAVING cutoff > 60000
+/* exclusion of documented known positives */ 
+AND ce.id NOT IN (5187, 38060, 60841, 14690, 15954, 42309, 42310)
 
 Suspicious rounds data
 4. Time limit < 10 seconds
-SELECT ce.competition_id, ce.event_id, 
+SELECT ce.id, ce.competition_id, ce.event_id, 
  CONVERT(MID(ro.time_limit, 17, 10), UNSIGNED INTEGER) time_limit
 FROM (SELECT * FROM rounds WHERE time_limit is not NULL) as ro 
 INNER JOIN competition_events as ce on ce.id = ro.competition_event_id
@@ -232,7 +264,7 @@ INNER JOIN (SELECT id FROM Competitions WHERE announced_at is not NULL) as comps
 
 Suspicious rounds data
 5. Time limit > 10 minutes for ""fast events"":
-SELECT ce.competition_id, ce.event_id, 
+SELECT ce.id, ce.competition_id, ce.event_id, 
  CONVERT(MID(ro.time_limit, 17, 10), UNSIGNED INTEGER) time_limit
 FROM (SELECT * FROM rounds WHERE time_limit is not NULL) as ro 
 INNER JOIN (SELECT * FROM competition_events WHERE event_id in (
@@ -240,6 +272,8 @@ INNER JOIN (SELECT * FROM competition_events WHERE event_id in (
  ON ce.id = ro.competition_event_id
 INNER JOIN (SELECT id FROM Competitions WHERE announced_at is not NULL) as comps
  ON ce.competition_id = comps.id HAVING time_limit> 60000
+/* exclusion of documented known positives */ 
+AND ce.id NOT IN (35399, 8314, 9642, 66579, 66577, 16341, 20992, 41741, 26092, 26358, 27386)
 
 Consistency of Results & Persons
 1. Persons table entries without Results table entry:
